@@ -29,7 +29,7 @@ jobs:
 
       - name: Run scraper
         run: |
-          python scraper.py
+          python main_scraper.py
 
       - name: Commit updated lunch data
         run: |
