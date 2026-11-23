@@ -1,19 +1,25 @@
 {
-  "updated": "2026-11-23 08:00",
+  "updated": "2026-11-23T15:57:08.148941+02:00",
   "restaurants": [
     {
-      "name": "Ravintola A",
+      "name": "Testiravintola",
+      "source": "https://example.com",
       "meals": [
-        "Lihapullat ja muusi",
-        "Lohikeitto",
-        "Kasviscurry"
-      ]
-    },
-    {
-      "name": "Ravintola B",
-      "meals": [
-        "Kana tikka masala",
-        "Kasvislasagne"
+        {
+          "name": "Lihapullat ja perunamuusi",
+          "price": "12,90 €",
+          "diet": [
+            "L"
+          ]
+        },
+        {
+          "name": "Kasviscurry",
+          "price": "11,90 €",
+          "diet": [
+            "VEG",
+            "G"
+          ]
+        }
       ]
     }
   ]
