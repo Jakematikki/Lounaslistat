@@ -1,0 +1,20 @@
+{
+  "updated": "2026-11-23 08:00",
+  "restaurants": [
+    {
+      "name": "Ravintola A",
+      "meals": [
+        "Lihapullat ja muusi",
+        "Lohikeitto",
+        "Kasviscurry"
+      ]
+    },
+    {
+      "name": "Ravintola B",
+      "meals": [
+        "Kana tikka masala",
+        "Kasvislasagne"
+      ]
+    }
+  ]
+}
