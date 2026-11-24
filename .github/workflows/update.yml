@@ -1,54 +1,51 @@
 name: Update lunch menus and deploy Pages
 
 on:
-  # Julkaise aina, kun main-haaraan pushataan muutoksia.
   push:
     branches:
       - main
 
-  # Mahdollistaa käsin käynnistyksen:
-  # Actions -> Update lunch menus and deploy Pages -> Run workflow
   workflow_dispatch:
 
-  # Päivitä lounaslistat automaattisesti arkisin.
-  # GitHub käyttää cronissa UTC-aikaa.
-  # 06:00 UTC = Suomessa 08:00 talvella / 09:00 kesällä.
   schedule:
     - cron: "0 6 * * 1-5"
 
 
-# GitHub Pages tarvitsee nämä oikeudet.
 permissions:
   contents: read
   pages: write
   id-token: write
 
 
-# Estetään useiden Pages-julkaisujen ajaminen yhtä aikaa.
 concurrency:
   group: "pages"
   cancel-in-progress: false
 
 
 jobs:
-
-  # -----------------------------------------------------------------------
-  # BUILD
-  #
-  # 1. Hakee repon
-  # 2. Asentaa Pythonin riippuvuudet
-  # 3. Ajaa scraperit
-  # 4. Luo site/data/lunch.json
-  # 5. Pakkaa site/-hakemiston Pages-artifactiksi
-  # -----------------------------------------------------------------------
-
-  build:
+  deploy:
     runs-on: ubuntu-latest
 
-    steps:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
+    steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
+
+
+      - name: Show repository contents
+        run: |
+          echo "Repository root:"
+          pwd
+          find . -maxdepth 3 -type f | sort
+
+
+      - name: Verify index.html exists
+        run: |
+          test -f site/index.html
+          echo "site/index.html found"
 
 
       - name: Set up Python
@@ -63,47 +60,38 @@ jobs:
           python -m pip install -r requirements.txt
 
 
-      - name: Fetch lunch menus
+      - name: Run lunch scrapers
         run: |
           python main_scraper.py
 
 
-      # Tämä ei ole pakollinen, mutta on hyödyllinen:
-      # workflow kaatuu selkeästi jos scraperi ei tuottanut tiedostoa.
-      - name: Verify generated lunch data
+      - name: Verify complete site
         run: |
+          echo "Files that will be published:"
+          find site -maxdepth 3 -type f | sort
+
+          echo ""
+          echo "Checking required files:"
+
+          test -f site/index.html
+          test -f site/app.js
+          test -f site/style.css
           test -f site/data/lunch.json
-          echo "Generated lunch.json:"
-          cat site/data/lunch.json
+
+          echo ""
+          echo "Everything required exists."
 
 
-      - name: Configure GitHub Pages
+      - name: Setup Pages
         uses: actions/configure-pages@v5
 
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v5
         with:
           path: ./site
 
 
-  # -----------------------------------------------------------------------
-  # DEPLOY
-  #
-  # Julkaisee build-jobin tekemän Pages-artifactin.
-  # -----------------------------------------------------------------------
-
-  deploy:
-    needs: build
-
-    runs-on: ubuntu-latest
-
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
-    steps:
-
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
