@@ -114,27 +114,176 @@ def html_to_lines(
     return lines
 
 
+def calculate_diet_tags(
+    groups: list[set[str]]
+) -> list[str]:
+    """
+    Laskee koko annosriville turvallisesti pätevät merkinnät.
+
+    Esimerkkejä:
+
+        (L+G) + (VE+G)
+            -> L, G
+
+        (M+G+VS) + (VE+G)
+            -> M, G, VS
+
+        (VL+VS) + (L+G)
+            -> VL, VS
+
+    Merkintöjen merkitys:
+
+        G   = gluteeniton
+        VE  = vegaaninen
+        M   = maidoton
+        L   = laktoositon
+        VL  = vähälaktoosinen
+        VS  = sisältää valkosipulia
+    """
+
+    if not groups:
+        return []
+
+    #
+    # Jos rivillä on vain yksi merkintäryhmä,
+    # voidaan käyttää sitä sellaisenaan.
+    #
+    if len(groups) == 1:
+        preferred_order = [
+            "VE",
+            "M",
+            "L",
+            "VL",
+            "G",
+            "VS",
+        ]
+
+        return [
+            tag
+            for tag in preferred_order
+            if tag in groups[0]
+        ]
+
+    result = []
+
+
+    #
+    # Vegaaninen vain jos kaikki annoksen osat
+    # ovat vegaanisia.
+    #
+    if all(
+        "VE" in group
+        for group in groups
+    ):
+        result.append("VE")
+
+
+    #
+    # Maidoton:
+    #
+    # VE on luonnollisesti myös maidoton.
+    #
+    elif all(
+        bool(
+            group
+            & {
+                "M",
+                "VE",
+            }
+        )
+        for group in groups
+    ):
+        result.append("M")
+
+
+    #
+    # Laktoositon:
+    #
+    # M ja VE ovat myös laktoosittomia.
+    #
+    elif all(
+        bool(
+            group
+            & {
+                "L",
+                "M",
+                "VE",
+            }
+        )
+        for group in groups
+    ):
+        result.append("L")
+
+
+    #
+    # Vähälaktoosinen:
+    #
+    # L, M ja VE täyttävät myös VL-vaatimuksen.
+    #
+    elif all(
+        bool(
+            group
+            & {
+                "VL",
+                "L",
+                "M",
+                "VE",
+            }
+        )
+        for group in groups
+    ):
+        result.append("VL")
+
+
+    #
+    # Gluteeniton vain jos kaikki annoksen osat
+    # on merkitty gluteenittomiksi.
+    #
+    if all(
+        "G" in group
+        for group in groups
+    ):
+        result.append("G")
+
+
+    #
+    # VS tarkoittaa "sisältää valkosipulia".
+    #
+    # Tähän riittää, että yksikin annoksen osa
+    # sisältää valkosipulia.
+    #
+    if any(
+        "VS" in group
+        for group in groups
+    ):
+        result.append("VS")
+
+
+    return result
+
+
 def parse_meal(
     line: str
 ) -> dict:
     """
-    Factoryn yksi rivi voi sisältää useita ruokalajin
-    osia eri ruokavaliomerkinnöillä.
+    Parsii Factoryn ruokarivin.
 
     Esimerkiksi:
 
         Paahdettua lohta ... (L+G)
         yrttiperunat (VE+G)
 
-    Tällaista riviä ei ole turvallista merkitä kokonaan
-    vegaaniseksi vain siksi, että lisuke on VE.
+    muuttuu muotoon:
 
-    Siksi ruokavaliot erotetaan omiksi tageiksi vain,
-    jos rivillä on yksi ainoa ruokavalioryhmä ja se on
-    aivan rivin lopussa.
+        {
+            "name":
+                "Paahdettua lohta ... yrttiperunat",
 
-    Muissa tapauksissa Factoryn alkuperäiset merkinnät
-    jätetään näkyviin annoksen nimeen.
+            "diet": [
+                "L",
+                "G"
+            ]
+        }
     """
 
     matches = list(
@@ -143,40 +292,51 @@ def parse_meal(
         )
     )
 
-    if len(matches) != 1:
+    if not matches:
 
         return {
             "name": line,
             "diet": [],
         }
 
-    match = matches[0]
 
-    #
-    # Ruokavalioryhmän pitää olla rivin lopussa.
-    #
-    if match.end() != len(line):
+    groups = []
 
-        return {
-            "name": line,
-            "diet": [],
+    for match in matches:
+
+        tags = {
+            tag.strip().upper()
+            for tag
+            in match
+            .group("tags")
+            .split("+")
         }
 
-    tags = [
-        tag.strip().upper()
-        for tag
-        in match.group("tags").split("+")
-    ]
+        groups.append(
+            tags
+        )
 
-    name = line[
-        :match.start()
-    ].strip()
+
+    #
+    # Poistetaan itse (L+G), (VE+G) jne.
+    # näkyvästä ruoan nimestä.
+    #
+    name = DIET_GROUP_RE.sub(
+        "",
+        line
+    )
+
+    name = normalize_line(
+        name
+    )
+
 
     return {
         "name": name,
-        "diet": tags,
+        "diet": calculate_diet_tags(
+            groups
+        ),
     }
-
 
 def parse_price(
     lines: list[str]
