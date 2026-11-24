@@ -203,13 +203,33 @@ function createRestaurantCard(restaurant, selectedDay) {
             /*
              * Annoksen nimi
              */
-            item.appendChild(
-                createElement(
-                    "div",
-                    "meal-name",
-                    meal.name
-                )
-            );
+const mealHeading = createElement(
+    "div",
+    "meal-heading"
+);
+
+mealHeading.appendChild(
+    createElement(
+        "div",
+        "meal-name",
+        meal.name
+    )
+);
+
+if (meal.price) {
+    mealHeading.appendChild(
+        createElement(
+            "span",
+            "meal-price",
+            meal.price
+        )
+    );
+}
+
+item.appendChild(
+    mealHeading
+);
+            
 
 
             /*
