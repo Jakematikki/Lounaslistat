@@ -23,26 +23,22 @@ concurrency:
 
 
 jobs:
-  deploy:
-    runs-on: ubuntu-latest
 
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build:
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
 
       - name: Show repository contents
         run: |
-          echo "Repository root:"
-          pwd
-          find . -maxdepth 3 -type f | sort
+          echo "Repository contents:"
+          find . -maxdepth 4 -type f | sort
 
 
-      - name: Verify index.html exists
+      - name: Verify index.html
         run: |
           test -f site/index.html
           echo "site/index.html found"
@@ -65,21 +61,17 @@ jobs:
           python main_scraper.py
 
 
-      - name: Verify complete site
+      - name: Verify site files
         run: |
-          echo "Files that will be published:"
-          find site -maxdepth 3 -type f | sort
-
-          echo ""
-          echo "Checking required files:"
+          echo "Files to be published:"
+          find site -maxdepth 4 -type f | sort
 
           test -f site/index.html
           test -f site/app.js
           test -f site/style.css
           test -f site/data/lunch.json
 
-          echo ""
-          echo "Everything required exists."
+          echo "All required files found."
 
 
       - name: Setup Pages
@@ -87,11 +79,21 @@ jobs:
 
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v5
+        uses: actions/upload-pages-artifact@v4
         with:
           path: ./site
 
 
+  deploy:
+    needs: build
+
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@v4
