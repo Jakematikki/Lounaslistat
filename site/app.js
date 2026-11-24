@@ -65,7 +65,11 @@ function createElement(tag, className, text) {
 
 
 function createRestaurantCard(restaurant, selectedDay) {
-    const card = createElement("article", "restaurant-card");
+    const card = createElement(
+        "article",
+        "restaurant-card"
+    );
+
 
     /*
      * Ravintolan otsikko
@@ -83,6 +87,11 @@ function createRestaurantCard(restaurant, selectedDay) {
         )
     );
 
+
+    /*
+     * Ravintolan metatiedot:
+     * päivä, viikko ja osoite
+     */
     const meta = createElement(
         "div",
         "restaurant-meta"
@@ -164,7 +173,8 @@ function createRestaurantCard(restaurant, selectedDay) {
 
 
     /*
-     * Jos kyseiselle päivälle ei ole ruokalistaa.
+     * Jos kyseiselle päivälle
+     * ei ole ruokalistaa.
      */
     if (meals.length === 0) {
         card.appendChild(
@@ -181,12 +191,14 @@ function createRestaurantCard(restaurant, selectedDay) {
             "meal-list"
         );
 
+
         for (const meal of meals) {
 
             const item = createElement(
                 "li",
                 "meal"
             );
+
 
             /*
              * Annoksen nimi
@@ -198,6 +210,24 @@ function createRestaurantCard(restaurant, selectedDay) {
                     meal.name
                 )
             );
+
+
+            /*
+             * Annoksen kuvaus.
+             *
+             * Tämä näkyy esimerkiksi
+             * Street Canteenin eksoottisempien
+             * ruokien kohdalla.
+             */
+            if (meal.description) {
+                item.appendChild(
+                    createElement(
+                        "div",
+                        "meal-description",
+                        meal.description
+                    )
+                );
+            }
 
 
             /*
@@ -232,8 +262,10 @@ function createRestaurantCard(restaurant, selectedDay) {
                 item.appendChild(details);
             }
 
+
             list.appendChild(item);
         }
+
 
         card.appendChild(list);
     }
@@ -263,6 +295,7 @@ function createRestaurantCard(restaurant, selectedDay) {
         card.appendChild(footer);
     }
 
+
     return card;
 }
 
@@ -276,10 +309,15 @@ async function loadLunchMenus() {
         document.getElementById("updated");
 
 
+    /*
+     * Jos HTML:stä puuttuu restaurants-elementti,
+     * ei voida renderöidä kortteja.
+     */
     if (!root) {
         console.error(
             'Element with id="restaurants" was not found.'
         );
+
         return;
     }
 
@@ -291,7 +329,8 @@ async function loadLunchMenus() {
     try {
 
         /*
-         * Haetaan GitHub Actionsin generoima JSON.
+         * Haetaan GitHub Actionsin
+         * generoima lunch.json.
          */
         const response = await fetch(
             "./data/lunch.json",
@@ -313,7 +352,7 @@ async function loadLunchMenus() {
 
 
         /*
-         * Päivitysaika sivun otsikon alle.
+         * Sivun yläosan päivitysaika.
          */
         if (updated) {
 
@@ -327,24 +366,21 @@ async function loadLunchMenus() {
                 selectedDay;
 
 
-            if (generated) {
-                updated.textContent =
-                    `${dayName} · Päivitetty ${generated}`;
-            } else {
-                updated.textContent =
-                    dayName;
-            }
+            updated.textContent = generated
+                ? `${dayName} · Päivitetty ${generated}`
+                : dayName;
         }
 
 
         /*
-         * Tyhjennetään mahdollinen vanha sisältö.
+         * Poistetaan HTML:ssä mahdollisesti
+         * oleva "Ladataan..."-teksti.
          */
         root.replaceChildren();
 
 
         /*
-         * Tarkistetaan että ravintoloita löytyi.
+         * Jos ravintoloita ei tullut JSON:ssa.
          */
         if (
             !Array.isArray(data.restaurants) ||
@@ -364,17 +400,17 @@ async function loadLunchMenus() {
 
 
         /*
-         * Rakennetaan ravintolakortit.
+         * Luodaan ravintolakortti
+         * jokaiselle ravintolalle.
          */
         for (const restaurant of data.restaurants) {
 
-            const card =
+            root.appendChild(
                 createRestaurantCard(
                     restaurant,
                     selectedDay
-                );
-
-            root.appendChild(card);
+                )
+            );
         }
 
 
@@ -403,7 +439,8 @@ async function loadLunchMenus() {
 
 
 /*
- * Käynnistetään vasta kun HTML on ladattu.
+ * Käynnistetään vasta kun DOM
+ * on kokonaan ladattu.
  */
 document.addEventListener(
     "DOMContentLoaded",
