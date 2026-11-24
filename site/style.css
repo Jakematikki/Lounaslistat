@@ -1,0 +1,323 @@
+/* =========================================================
+   Lounaslistat – esimerkkityyli
+   ========================================================= */
+
+/* --- Perusasetukset ------------------------------------------------------ */
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+:root {
+    --page-bg: #f4f6f8;
+    --card-bg: #ffffff;
+    --text: #1f2933;
+    --muted: #667085;
+    --border: #e5e7eb;
+    --accent: #2f855a;
+    --accent-soft: #e8f5ee;
+    --shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    --radius: 14px;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    font-family:
+        Inter,
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+    background: var(--page-bg);
+    color: var(--text);
+    line-height: 1.5;
+}
+
+
+/* --- Sivun yläosa ------------------------------------------------------- */
+
+header {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 32px 24px 14px;
+}
+
+header h1 {
+    margin: 0;
+    font-size: clamp(1.9rem, 3vw, 2.7rem);
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+}
+
+header p {
+    margin: 8px 0 0;
+}
+
+#updated {
+    color: var(--muted);
+    font-size: 0.95rem;
+}
+
+
+/* --- Sivun pääsisältö --------------------------------------------------- */
+
+main {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 20px 24px 48px;
+}
+
+
+/* --- Ravintolaruudukko -------------------------------------------------- */
+
+/*
+   Korttien minimileveys on 340 px.
+   Selain päättää automaattisesti montako korttia mahtuu rinnakkain.
+
+   Esimerkiksi:
+   - suuri näyttö: yleensä 4 korttia
+   - keskikokoinen näyttö: 2–3 korttia
+   - puhelin: 1 kortti
+*/
+.restaurant-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 20px;
+    align-items: start;
+}
+
+
+/* --- Ravintolakortti ---------------------------------------------------- */
+
+.restaurant-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+
+    transition:
+        transform 0.18s ease,
+        box-shadow 0.18s ease;
+}
+
+.restaurant-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.11);
+}
+
+
+/* --- Kortin otsikko ----------------------------------------------------- */
+
+.restaurant-card-header {
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid var(--border);
+}
+
+.restaurant-card h2 {
+    margin: 0;
+    font-size: 1.35rem;
+    line-height: 1.25;
+}
+
+.restaurant-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+.restaurant-date {
+    font-weight: 600;
+}
+
+
+/* --- Lounaslista -------------------------------------------------------- */
+
+.meal-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.meal {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+}
+
+.meal:last-child {
+    border-bottom: 0;
+}
+
+.meal-name {
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.meal-description {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 0.92rem;
+}
+
+
+/* --- Hinta + ruokavaliot ------------------------------------------------ */
+
+.meal-details {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-top: 9px;
+}
+
+.price {
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.diet {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.diet-tag {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 3px 8px;
+
+    background: var(--accent-soft);
+    color: var(--accent);
+
+    border-radius: 999px;
+
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+
+/* --- Kortin alatunniste ------------------------------------------------- */
+
+.restaurant-footer {
+    padding: 14px 20px 18px;
+    border-top: 1px solid var(--border);
+    background: #fafafa;
+}
+
+.restaurant-source {
+    color: var(--accent);
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.restaurant-source:hover {
+    text-decoration: underline;
+}
+
+
+/* --- Esimerkiksi keitto-/lounaspöytähinnat ----------------------------- */
+
+.restaurant-prices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 14px 20px;
+
+    background: #fafafa;
+    border-bottom: 1px solid var(--border);
+}
+
+.restaurant-price {
+    padding: 5px 9px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+
+    background: white;
+    color: var(--muted);
+
+    font-size: 0.85rem;
+}
+
+
+/* --- Virhe / tyhjä lista ------------------------------------------------ */
+
+.message {
+    grid-column: 1 / -1;
+
+    padding: 28px;
+
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+
+    color: var(--muted);
+    text-align: center;
+}
+
+.error-message {
+    color: #b42318;
+}
+
+
+/* --- Responsiivisuus ---------------------------------------------------- */
+
+@media (max-width: 760px) {
+    header {
+        padding: 24px 16px 10px;
+    }
+
+    main {
+        padding: 16px 16px 36px;
+    }
+
+    .restaurant-grid {
+        /*
+           Alle 760 px leveällä näytöllä yksi kortti/rivi.
+           Tämä estää liian kapeat kortit puhelimella.
+        */
+        grid-template-columns: 1fr;
+        gap: 14px;
+    }
+
+    .restaurant-card-header,
+    .meal,
+    .restaurant-footer,
+    .restaurant-prices {
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+
+    .meal-details {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 7px;
+    }
+}
+
+
+/* --- Hyvin suuret näytöt ------------------------------------------------ */
+
+@media (min-width: 1800px) {
+    /*
+       Sivun maksimileveys on tarkoituksella edelleen 1600 px.
+       Näin kortit eivät veny valtavan leveiksi ultrawide-näytöllä.
+    */
+    header,
+    main {
+        max-width: 1600px;
+    }
+}
