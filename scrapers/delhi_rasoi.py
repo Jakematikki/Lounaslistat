@@ -6,7 +6,6 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from bs4 import BeautifulSoup
-from bs4.element import Tag
 
 from common.http_client import (
     create_session,
@@ -14,48 +13,32 @@ from common.http_client import (
 )
 
 
-DATA_URL = (
-    "https://lunchmenu.fi/en/lunch-lists/"
-    "espoo/delhi-rasoi-tapiola"
-)
-
-OFFICIAL_URL = (
-    "https://delhirasoi.fi/lunch?store=8"
-)
+URL = "https://delhirasoi.fi/lunch?store=8"
 
 
 WEEKDAYS = {
-    "monday": "monday",
-    "tuesday": "tuesday",
-    "wednesday": "wednesday",
-    "thursday": "thursday",
-    "friday": "friday",
-    "saturday": "saturday",
-    "sunday": "sunday",
+    "maanantai": "monday",
+    "tiistai": "tuesday",
+    "keskiviikko": "wednesday",
+    "torstai": "thursday",
+    "perjantai": "friday",
+    "lauantai": "saturday",
+    "sunnuntai": "sunday",
 }
 
 
 #
-# Esimerkiksi:
+# Sivulla päivämäärä on esimerkiksi:
 #
-# Monday 23.11.
+#   Tiistai 24.11.
 #
-# Today Tuesday 24.11.10:30-14:30
-#
-# Wednesday 25.11.10:30-14:30
+# Vuotta EI ole.
 #
 DAY_RE = re.compile(
-    r"^(?:Today\s+)?"
-    r"(Monday|Tuesday|Wednesday|Thursday|"
-    r"Friday|Saturday|Sunday)"
+    r"^(maanantai|tiistai|keskiviikko|torstai|"
+    r"perjantai|lauantai|sunnuntai)"
     r"\s+"
-    r"(\d{1,2})\.(\d{1,2})\."
-    r"(?:\s*"
-    r"(\d{1,2}:\d{2})"
-    r"\s*[–-]\s*"
-    r"(\d{1,2}:\d{2})"
-    r")?"
-    r"$",
+    r"(\d{1,2})\.(\d{1,2})\.$",
     re.IGNORECASE,
 )
 
@@ -63,65 +46,55 @@ DAY_RE = re.compile(
 #
 # Esimerkiksi:
 #
-# Butter Chicken G L 14.90€
+#   10:30 – 14:30 14,90 €
+#   11:00 – 16:00 17,90 €
 #
-# Band Gobhi Mattar G Vgn 14.90€
-#
-MEAL_PRICE_RE = re.compile(
-    r"^(?P<body>.+?)"
+TIME_PRICE_RE = re.compile(
+    r"^(?P<start>\d{1,2}:\d{2})"
+    r"\s*[–-]\s*"
+    r"(?P<end>\d{1,2}:\d{2})"
     r"\s+"
     r"(?P<price>\d+[,.]\d{2})"
-    r"\s*€$",
-    re.IGNORECASE,
+    r"\s*€$"
 )
 
 
 #
-# Lunchmenu.fi:n käyttämät ruokavaliokoodit,
-# joita voidaan löytää annoksen nimen lopusta.
+# Esimerkiksi:
 #
-KNOWN_SOURCE_TAGS = {
-    "G",
-    "L",
-    "M",
-    "VL",
-    "VGN",
-    "VG",
-    "VEG",
-    "K",
-    "VS",
-    "P",
-    "N",
-    "SO",
-    "C",
-    "A",
-}
+#   Butter Chicken (G, L)
+#   Band Gobhi Mattar (G, V)
+#   Veg Kofta Korma (G, L, K)
+#
+DIET_RE = re.compile(
+    r"\s*"
+    r"\("
+    r"(?P<tags>"
+    r"[A-ZÅÄÖ]+"
+    r"(?:\s*,\s*[A-ZÅÄÖ]+)*"
+    r")"
+    r"\)"
+    r"\s*$",
+    re.IGNORECASE,
+)
 
 
-#
-# Muutetaan Lunchmenu.fi:n merkinnät
-# meidän käyttämään muotoon.
-#
 DIET_MAPPING = {
     "G": "G",
     "L": "L",
     "M": "M",
     "VL": "VL",
 
-    # vegan
-    "VGN": "VE",
+    #
+    # Delhi Rasoi:
+    # V = vegaaninen
+    #
+    "V": "VE",
 
-    # vegetarian
-    "VG": "K",
-    "VEG": "K",
+    #
+    # K = kasvis
+    #
     "K": "K",
-
-    # garlic
-    "VS": "VS",
-
-    # hyödyllisiä allergeenimerkintöjä
-    "N": "N",
-    "SO": "SO",
 }
 
 
@@ -135,19 +108,54 @@ def normalize_line(
     ).strip()
 
 
+def html_to_lines(
+    html: str
+) -> list[str]:
+    """
+    Muuttaa sivun HTML:n tekstiriveiksi.
+
+    Delhi Rasoin oma sivu sisältää lounasdatan
+    valmiiksi HTML:ssä, joten JavaScript-renderöintiä
+    ei tarvita.
+    """
+
+    soup = BeautifulSoup(
+        html,
+        "html.parser"
+    )
+
+    text = soup.get_text(
+        "\n",
+        strip=True
+    )
+
+    lines = []
+
+    for raw_line in text.splitlines():
+
+        line = normalize_line(
+            raw_line
+        )
+
+        if line:
+            lines.append(
+                line
+            )
+
+    return lines
+
+
 def infer_full_date(
     day: int,
     month: int
 ) -> date:
     """
-    Lunchmenu.fi näyttää esimerkiksi:
+    Delhi Rasoi ilmoittaa esimerkiksi:
 
         24.11.
 
-    mutta ei vuotta.
-
-    Valitaan nykyhetkeä lähimpänä oleva
-    kyseinen päivämäärä.
+    Päätellään vuosi nykyhetken perusteella.
+    Toimii myös vuodenvaihteen ympärillä.
     """
 
     today = datetime.now(
@@ -178,6 +186,7 @@ def infer_full_date(
 
 
     if not candidates:
+
         raise ValueError(
             f"Invalid Delhi Rasoi date: "
             f"{day}.{month}."
@@ -196,107 +205,68 @@ def infer_full_date(
     )
 
 
-def parse_meal_text(
-    text: str
-) -> dict | None:
+def is_meal_name(
+    line: str
+) -> bool:
+    """
+    Tunnistaa ruoan otsikkorivin.
+
+    Tavallisissa ruoissa on ruokavaliomerkintä:
+
+        Butter Chicken (G, L)
+
+    Jälkiruoassa merkintää ei välttämättä ole:
+
+        Jälkiruoka Chocolate Cake
+    """
+
+    if DIET_RE.search(
+        line
+    ):
+        return True
+
+    if line.lower().startswith(
+        "jälkiruoka "
+    ):
+        return True
+
+    return False
+
+
+def parse_meal_name(
+    line: str
+) -> tuple[str, list[str]]:
     """
     Esimerkiksi:
 
-        Butter Chicken G L 14.90€
+        Band Gobhi Mattar (G, V)
 
-    muuttuu:
+    ->
 
-        {
-            "name": "Butter Chicken",
-            "diet": ["G", "L"],
-            "price": "14,90 €"
-        }
-
-
-    Ja esimerkiksi:
-
-        Shahi Mattar Paneer:
-        Cottage cheese and peas in cashew cream sauce
-        G Vg N 14.90€
-
-    muuttuu:
-
-        {
-            "name": "Shahi Mattar Paneer",
-            "description":
-                "Cottage cheese and peas in cashew cream sauce",
-            "diet": ["G", "K", "N"],
-            "price": "14,90 €"
-        }
+        Band Gobhi Mattar
+        ["G", "VE"]
     """
 
-    text = normalize_line(
-        text
+    match = DIET_RE.search(
+        line
     )
 
 
-    price_match = MEAL_PRICE_RE.match(
-        text
-    )
+    if not match:
 
-
-    if not price_match:
-        return None
-
-
-    body = normalize_line(
-        price_match.group(
-            "body"
-        )
-    )
-
-
-    price = (
-        price_match
-        .group("price")
-        .replace(".", ",")
-    )
-
-    price = f"{price} €"
-
-
-    #
-    # Ruokavaliomerkinnät sijaitsevat
-    # annoksen lopussa ennen hintaa.
-    #
-    parts = body.split()
-
-    source_tags = []
-
-
-    while parts:
-
-        candidate = (
-            parts[-1]
-            .strip()
-            .upper()
+        return (
+            line,
+            []
         )
 
 
-        if candidate not in KNOWN_SOURCE_TAGS:
-            break
-
-
-        source_tags.insert(
-            0,
-            candidate
-        )
-
-        parts.pop()
-
-
-    meal_text = " ".join(
-        parts
-    ).strip()
-
-
-    if not meal_text:
-        return None
+    source_tags = [
+        tag.strip().upper()
+        for tag
+        in match
+        .group("tags")
+        .split(",")
+    ]
 
 
     diets = []
@@ -305,211 +275,90 @@ def parse_meal_text(
     for source_tag in source_tags:
 
         mapped = DIET_MAPPING.get(
+            source_tag,
             source_tag
         )
 
 
-        if (
-            mapped
-            and
-            mapped not in diets
-        ):
+        if mapped not in diets:
             diets.append(
                 mapped
             )
 
 
-    #
-    # Lunchmenu.fi käyttää joissakin annoksissa:
-    #
-    # Shahi Mattar Paneer:
-    # Cottage cheese and peas ...
-    #
-    description = None
-    name = meal_text
+    name = line[
+        :match.start()
+    ].strip()
 
 
-    if ":" in meal_text:
-
-        possible_name, possible_description = (
-            meal_text.split(
-                ":",
-                1
-            )
-        )
+    return (
+        name,
+        diets
+    )
 
 
-        possible_name = (
-            possible_name.strip()
-        )
-
-        possible_description = (
-            possible_description.strip()
-        )
-
-
-        if (
-            possible_name
-            and
-            possible_description
-        ):
-            name = possible_name
-            description = (
-                possible_description
-            )
-
-
-    result = {
-        "name":
-            name,
-
-        "diet":
-            diets,
-
-        "price":
-            price,
-    }
-
-
-    if description:
-        result[
-            "description"
-        ] = description
-
-
-    return result
-
-
-def get_day_headings(
-    soup: BeautifulSoup
-) -> list[tuple[Tag, re.Match]]:
+def is_description(
+    line: str
+) -> bool:
     """
-    Etsii kaikki tämän viikon päiväotsikot.
+    Tarkistaa, voiko seuraava rivi olla
+    ruoan suomenkielinen kuvaus.
     """
 
-    headings = []
-
-
-    for heading in soup.find_all(
-        ["h2", "h3"]
+    if DAY_RE.match(
+        line
     ):
-
-        text = normalize_line(
-            heading.get_text(
-                " ",
-                strip=True
-            )
-        )
+        return False
 
 
-        match = DAY_RE.match(
-            text
-        )
-
-
-        if match:
-            headings.append(
-                (
-                    heading,
-                    match
-                )
-            )
-
-
-    return headings
-
-
-def get_meals_after_heading(
-    heading: Tag
-) -> list[dict]:
-    """
-    Etsii päiväotsikon jälkeen kaikki <li>-annokset
-    seuraavaan päivä-/osio-otsikkoon asti.
-
-    Tämä ratkaisee aiemman ongelman:
-    annoksen nimi, tagit ja hinta voivat olla HTML:ssä
-    eri span-elementeissä, mutta li.get_text(" ")
-    yhdistää ne takaisin samaksi annokseksi.
-    """
-
-    meals = []
-
-
-    for element in heading.find_all_next(
-        ["h2", "h3", "li"]
+    if TIME_PRICE_RE.match(
+        line
     ):
-
-        if element is heading:
-            continue
+        return False
 
 
-        #
-        # Seuraava otsikko lopettaa tämän päivän.
-        #
-        if element.name in {
-            "h2",
-            "h3",
-        }:
-            break
+    if is_meal_name(
+        line
+    ):
+        return False
 
 
-        if element.name != "li":
-            continue
+    lowered = line.lower()
 
 
-        text = normalize_line(
-            element.get_text(
-                " ",
-                strip=True
-            )
-        )
+    if lowered in {
+        "tänään",
+        "mennyt lounas",
+        "delhi rasoi",
+    }:
+        return False
 
 
-        meal = parse_meal_text(
-            text
-        )
-
-
-        if meal:
-            meals.append(
-                meal
-            )
-
-
-    return meals
+    return True
 
 
 def parse_menu(
-    html: str
+    lines: list[str]
 ) -> tuple[
     dict,
     dict,
     list[date],
 ]:
     """
-    Parsii koko viikon lounaslistan suoraan
-    sivun DOM-rakenteesta.
+    Parsii koko viikon lounaslistan.
+
+    Delhi Rasoin rakenne on:
+
+        Tiistai 24.11.
+        Tänään
+        10:30 – 14:30 14,90 €
+
+        Butter Chicken (G, L)
+        Voikanaa
+
+        Lamb Methi (G, L)
+        Lammasta sarviapilakastikkeessa
     """
-
-    soup = BeautifulSoup(
-        html,
-        "html.parser"
-    )
-
-
-    day_headings = (
-        get_day_headings(
-            soup
-        )
-    )
-
-
-    if not day_headings:
-        raise ValueError(
-            "Delhi Rasoi: "
-            "no lunch day headings found"
-        )
-
 
     days = {}
 
@@ -517,116 +366,264 @@ def parse_menu(
 
     dates = []
 
+    current_day = None
 
-    for heading, match in day_headings:
+    index = 0
 
-        english_day = (
-            match
-            .group(1)
-            .lower()
+
+    #
+    # Etsitään ensimmäinen oikea päiväotsikko.
+    #
+    while index < len(lines):
+
+        if DAY_RE.match(
+            lines[index]
+        ):
+            break
+
+        index += 1
+
+
+    if index >= len(lines):
+
+        raise ValueError(
+            "Delhi Rasoi: "
+            "no lunch day heading found"
         )
 
 
-        current_day = (
-            WEEKDAYS[
-                english_day
-            ]
+    while index < len(lines):
+
+        line = lines[index]
+
+
+        #
+        # Footer alkaa tästä.
+        #
+        if (
+            current_day is not None
+            and
+            line == "Delhi Rasoi"
+        ):
+            break
+
+
+        #
+        # Esimerkiksi:
+        #
+        # Tiistai 24.11.
+        #
+        day_match = DAY_RE.match(
+            line
         )
 
 
-        day_number = int(
-            match.group(2)
-        )
+        if day_match:
 
-        month_number = int(
-            match.group(3)
-        )
+            finnish_day = (
+                day_match
+                .group(1)
+                .lower()
+            )
 
 
-        full_date = (
-            infer_full_date(
-                day_number,
-                month_number
+            current_day = (
+                WEEKDAYS[
+                    finnish_day
+                ]
+            )
+
+
+            day_number = int(
+                day_match.group(2)
+            )
+
+            month_number = int(
+                day_match.group(3)
+            )
+
+
+            full_date = (
+                infer_full_date(
+                    day_number,
+                    month_number
+                )
+            )
+
+
+            if full_date not in dates:
+                dates.append(
+                    full_date
+                )
+
+
+            days[
+                current_day
+            ] = []
+
+
+            day_info[
+                current_day
+            ] = {
+                "date":
+                    full_date.isoformat()
+            }
+
+
+            index += 1
+            continue
+
+
+        if current_day is None:
+            index += 1
+            continue
+
+
+        #
+        # Näitä ei tarvita.
+        #
+        if line.lower() in {
+            "tänään",
+            "mennyt lounas",
+        }:
+
+            index += 1
+            continue
+
+
+        #
+        # Päivän lounasaika ja hinta.
+        #
+        time_price_match = (
+            TIME_PRICE_RE.match(
+                line
             )
         )
 
 
-        dates.append(
-            full_date
-        )
+        if time_price_match:
 
-
-        meals = (
-            get_meals_after_heading(
-                heading
+            price = (
+                time_price_match
+                .group("price")
+                .replace(".", ",")
             )
-        )
 
 
-        if not meals:
+            day_info[
+                current_day
+            ].update({
+                "start":
+                    time_price_match
+                    .group("start"),
 
-            print(
-                f"  WARNING: "
-                f"{current_day}: "
-                "day found but no meals parsed"
+                "end":
+                    time_price_match
+                    .group("end"),
+
+                "price":
+                    f"{price} €",
+            })
+
+
+            index += 1
+            continue
+
+
+        #
+        # Varsinainen ruokalaji.
+        #
+        if is_meal_name(
+            line
+        ):
+
+            name, diets = (
+                parse_meal_name(
+                    line
+                )
             )
+
+
+            description = None
+
+
+            #
+            # Kuvaus on normaalisti seuraava rivi:
+            #
+            # Butter Chicken (G, L)
+            # Voikanaa
+            #
+            # Maanantain "mennyt lounas" -osiossa
+            # kuvaukset voivat puuttua, joten seuraavan
+            # rivin tyyppi tarkastetaan ennen käyttöä.
+            #
+            if index + 1 < len(lines):
+
+                next_line = (
+                    lines[
+                        index + 1
+                    ]
+                )
+
+
+                if is_description(
+                    next_line
+                ):
+
+                    description = (
+                        next_line
+                    )
+
+
+            meal = {
+                "name":
+                    name,
+
+                "diet":
+                    diets,
+            }
+
+
+            if description:
+
+                meal[
+                    "description"
+                ] = description
+
+
+            days[
+                current_day
+            ].append(
+                meal
+            )
+
+
+            if description:
+                index += 2
+            else:
+                index += 1
 
             continue
 
 
-        days[
-            current_day
-        ] = meals
+        index += 1
 
 
-        info = {
-            "date":
-                full_date.isoformat()
-        }
-
-
-        if (
-            match.group(4)
-            and
-            match.group(5)
-        ):
-
-            info[
-                "start"
-            ] = match.group(4)
-
-            info[
-                "end"
-            ] = match.group(5)
-
-
-        #
-        # Delhi Rasoilla päivän annoksilla
-        # on sama buffet-hinta.
-        #
-        first_price = meals[
-            0
-        ].get(
-            "price"
-        )
-
-
-        if first_price:
-            info[
-                "price"
-            ] = first_price
-
-
-        day_info[
-            current_day
-        ] = info
+    #
+    # Poistetaan mahdolliset tyhjät päivät.
+    #
+    days = {
+        day: meals
+        for day, meals
+        in days.items()
+        if meals
+    }
 
 
     if not days:
 
         raise ValueError(
             "Delhi Rasoi: "
-            "day headings were found but "
             "no meals could be parsed"
         )
 
@@ -641,6 +638,11 @@ def parse_menu(
 def create_week_label(
     dates: list[date]
 ) -> str | None:
+    """
+    Esimerkiksi:
+
+        VIIKKO 48 | 23.-29.11.2026
+    """
 
     if not dates:
         return None
@@ -698,14 +700,13 @@ def create_prices(
     day_info: dict
 ) -> list[dict]:
     """
-    Ryhmitellään hinnat frontendille:
+    Tekee hinnat esimerkiksi:
 
         Ma–Pe 14,90 €
         La–Su 17,90 €
     """
 
     weekday_prices = []
-
     weekend_prices = []
 
 
@@ -717,13 +718,10 @@ def create_prices(
         "friday",
     ):
 
-        info = day_info.get(
-            day,
-            {}
-        )
-
-        price = info.get(
-            "price"
+        price = (
+            day_info
+            .get(day, {})
+            .get("price")
         )
 
 
@@ -743,13 +741,10 @@ def create_prices(
         "sunday",
     ):
 
-        info = day_info.get(
-            day,
-            {}
-        )
-
-        price = info.get(
-            "price"
+        price = (
+            day_info
+            .get(day, {})
+            .get("price")
         )
 
 
@@ -795,28 +790,35 @@ def create_prices(
 def fetch() -> dict:
     """
     Main scraperin kutsuma funktio.
+
+    Data haetaan suoraan Delhi Rasoin
+    omalta Tapiolan lounassivulta.
     """
 
     session = create_session()
 
 
     print(
-        "  Fetching Delhi Rasoi Tapiola "
-        "from lunchmenu.fi..."
+        "  Fetching Delhi Rasoi Tapiola..."
     )
 
 
     response = get(
         session,
-        DATA_URL,
+        URL,
         headers={
             "Accept":
                 "text/html,"
                 "application/xhtml+xml",
 
             "Accept-Language":
-                "en-US,en;q=0.9",
+                "fi-FI,fi;q=0.9,en;q=0.8",
         }
+    )
+
+
+    lines = html_to_lines(
+        response.text
     )
 
 
@@ -825,7 +827,7 @@ def fetch() -> dict:
         day_info,
         dates,
     ) = parse_menu(
-        response.text
+        lines
     )
 
 
@@ -873,10 +875,7 @@ def fetch() -> dict:
             "02100 Espoo",
 
         "source":
-            OFFICIAL_URL,
-
-        "data_source":
-            DATA_URL,
+            URL,
 
         "week":
             week,
