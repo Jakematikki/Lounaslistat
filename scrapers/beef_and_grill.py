@@ -14,60 +14,68 @@ from common.http_client import (
 )
 
 
-DATA_URL = "https://common-api.lounaat.info/tapiola"
+DATA_URL = (
+    "https://lounas.online/"
+    "espoo/alue/tapiola"
+)
 
-#
-# Käyttäjälle näytettävä lähde.
-# Beef & Grillin oma sivu on jätetty tarkoituksella pois,
-# koska se vastaa hyvin epäluotettavasti.
-#
-SOURCE_URL = "https://lounas.online/espoo/beef-grill"
-
+SOURCE_URL = (
+    "https://lounas.online/"
+    "espoo/beef-grill"
+)
 
 RESTAURANT_NAME = "Beef & Grill"
 
 
-WEEKDAY_KEYS = [
+WEEKDAYS = [
     "monday",
     "tuesday",
     "wednesday",
     "thursday",
     "friday",
-    "saturday",
-    "sunday",
 ]
 
 
-PRICE_RE = re.compile(
-    r"^(?:Hinta:\s*)?"
-    r"(?P<price>\d+[,.]\d{2})"
-    r"\s*(?:€|e)$",
-    re.IGNORECASE,
-)
-
-
+#
+# Esimerkiksi:
+#
+# 10.00-15.00
+# 10.00 – 15.00
+#
 TIME_RE = re.compile(
-    r"^\d{1,2}(?::\d{2})?"
-    r"\s*[-–]\s*"
-    r"\d{1,2}(?::\d{2})?$"
+    r"^(?P<start>\d{1,2}[.:]\d{2})"
+    r"\s*[–-]\s*"
+    r"(?P<end>\d{1,2}[.:]\d{2})$"
 )
 
 
-DISTANCE_RE = re.compile(
-    r"^\d+(?:[,.]\d+)?\s*(?:m|km)$",
-    re.IGNORECASE,
-)
-
-
-RATING_RE = re.compile(
-    r"^(?:\d+(?:[,.]\d+)?/5(?:\.0)?|/5(?:\.0)?)$",
-    re.IGNORECASE,
+#
+# Esimerkiksi:
+#
+# 19,30 €
+# 14.00 €
+#
+PRICE_RE = re.compile(
+    r"^(?P<price>\d+[,.]\d{2})"
+    r"\s*€$"
 )
 
 
 def normalize_line(
     value: str
 ) -> str:
+    """
+    Siivoaa lounas.online-sivulla esiintyvät
+    erikoisvälilyönnit ja word joiner -merkit.
+    """
+
+    value = (
+        value
+        .replace("\u2060", "")
+        .replace("\xa0", " ")
+        .replace("\u200b", "")
+    )
+
     return re.sub(
         r"\s+",
         " ",
@@ -75,39 +83,12 @@ def normalize_line(
     ).strip()
 
 
-def format_price(
-    value: str
-) -> str:
-    """
-    19,30e -> 19,30 €
-    """
-
-    match = PRICE_RE.match(
-        normalize_line(value)
-    )
-
-    if not match:
-        raise ValueError(
-            f"Invalid price: {value}"
-        )
-
-    price = (
-        match
-        .group("price")
-        .replace(".", ",")
-    )
-
-    return f"{price} €"
-
-
 def find_restaurant_heading(
     soup: BeautifulSoup
 ) -> Tag:
     """
-    Etsii Beef & Grill -otsikon.
-
-    Lounaat.info käyttää tällä hetkellä h3-otsikoita,
-    mutta sallitaan myös h2 tulevien muutosten varalta.
+    Etsii Tapiolan sivulta juuri Beef & Grill
+    -ravintolan otsikon.
     """
 
     for heading in soup.find_all(
@@ -125,8 +106,7 @@ def find_restaurant_heading(
             return heading
 
     raise ValueError(
-        "Beef & Grill heading was not found "
-        "from lounaat.info"
+        "Beef & Grill heading was not found"
     )
 
 
@@ -134,11 +114,8 @@ def extract_restaurant_lines(
     html: str
 ) -> list[str]:
     """
-    Kerää vain Beef & Grillin oman osuuden.
-
-    Käsittely lopetetaan seuraavaan ravintolaotsikkoon,
-    joten muiden Tapiolan ravintoloiden ruokia ei voi
-    vahingossa päätyä tähän listaan.
+    Kerää vain Beef & Grillin oman HTML-osion
+    seuraavaan ravintola-/osio-otsikkoon asti.
     """
 
     soup = BeautifulSoup(
@@ -156,15 +133,19 @@ def extract_restaurant_lines(
     for element in heading.next_elements:
 
         #
-        # Seuraava ravintolaotsikko lopettaa osion.
+        # Seuraava heading lopettaa Beef & Grillin
+        # oman osion.
         #
         if (
             isinstance(element, Tag)
             and
             element is not heading
             and
-            element.name
-            in {"h2", "h3", "h4"}
+            element.name in {
+                "h2",
+                "h3",
+                "h4",
+            }
         ):
             break
 
@@ -180,13 +161,13 @@ def extract_restaurant_lines(
             str(element)
         )
 
+
         if not line:
             continue
 
 
         #
-        # Sama tekstisolmu voi joskus tulla useampaan
-        # kertaan DOM-rakenteen vuoksi.
+        # Estetään peräkkäiset duplikaatit.
         #
         if (
             lines
@@ -201,56 +182,324 @@ def extract_restaurant_lines(
         )
 
 
+    if not lines:
+        raise ValueError(
+            "Beef & Grill section was empty"
+        )
+
+
     return lines
 
 
-def is_metadata(
+def is_time(
+    line: str
+) -> bool:
+    return TIME_RE.match(
+        normalize_line(line)
+    ) is not None
+
+
+def parse_time(
+    line: str
+) -> tuple[str, str]:
+    match = TIME_RE.match(
+        normalize_line(line)
+    )
+
+    if not match:
+        raise ValueError(
+            f"Invalid lunch time: {line}"
+        )
+
+    start = (
+        match
+        .group("start")
+        .replace(".", ":")
+    )
+
+    end = (
+        match
+        .group("end")
+        .replace(".", ":")
+    )
+
+    return (
+        start,
+        end,
+    )
+
+
+def is_price(
+    line: str
+) -> bool:
+    return PRICE_RE.match(
+        normalize_line(line)
+    ) is not None
+
+
+def format_price(
+    line: str
+) -> str:
+    match = PRICE_RE.match(
+        normalize_line(line)
+    )
+
+    if not match:
+        raise ValueError(
+            f"Invalid price: {line}"
+        )
+
+    price = (
+        match
+        .group("price")
+        .replace(".", ",")
+    )
+
+    return f"{price} €"
+
+
+def is_ui_text(
     line: str
 ) -> bool:
     """
-    Poistaa ravintolaosion metatiedot kuten:
-      /5.0
-      10-15
-      240m
+    Sivulla on myös käyttöliittymätekstejä,
+    joita ei haluta ruokalistaan.
     """
 
-    if RATING_RE.match(
+    normalized = normalize_line(
         line
+    )
+
+    lowered = normalized.lower()
+
+
+    if lowered in {
+        "piilota",
+        "beef & grill",
+    }:
+        return True
+
+
+    if lowered.startswith(
+        "näytä ravintolan"
     ):
         return True
 
-    if TIME_RE.match(
-        line
+
+    if lowered.startswith(
+        "ei lounasta "
     ):
         return True
 
-    if DISTANCE_RE.match(
-        line
+
+    if lowered.startswith(
+        "katso lista ravintolan"
     ):
         return True
+
+
+    #
+    # Sivun lyhennetty preview voi sisältää
+    # esimerkiksi:
+    #
+    # Black Angus Burger…
+    #
+    # jonka jälkeen tulee varsinainen teksti.
+    #
+    if normalized.endswith(
+        "…"
+    ):
+        return True
+
+
+    #
+    # Ravintolan osoite/metatieto.
+    #
+    if (
+        "Länsituuli 10"
+        in normalized
+    ):
+        return True
+
 
     return False
 
 
-def parse_meals(
+def split_day_sections(
+    lines: list[str]
+) -> list[
+    tuple[str, list[str]]
+]:
+    """
+    Tapiolan alue-sivulla jokainen Beef & Grillin
+    arkipäivä alkaa omalla:
+
+        10.00-15.00
+
+    rivillään.
+
+    Tällä erotellaan maanantai-perjantai toisistaan.
+    """
+
+    sections = []
+
+    current_time = None
+    current_lines = []
+
+
+    for line in lines:
+
+        line = normalize_line(
+            line
+        )
+
+
+        #
+        # Yläosan metatietorivillä voi olla kaikki
+        # viisi kellonaikaa samalla rivillä.
+        #
+        # Se EI täsmää TIME_RE:hen, koska siinä on
+        # muutakin tekstiä.
+        #
+        if is_time(
+            line
+        ):
+
+            if current_time is not None:
+
+                sections.append(
+                    (
+                        current_time,
+                        current_lines
+                    )
+                )
+
+
+            current_time = line
+            current_lines = []
+
+            continue
+
+
+        if current_time is None:
+            continue
+
+
+        if line.lower().startswith(
+            "ei lounasta lauantaina"
+        ):
+            break
+
+
+        current_lines.append(
+            line
+        )
+
+
+    if current_time is not None:
+
+        sections.append(
+            (
+                current_time,
+                current_lines
+            )
+        )
+
+
+    #
+    # Beef & Grillillä pitäisi olla viisi
+    # arkipäivän osiota.
+    #
+    if len(sections) < 5:
+
+        raise ValueError(
+            "Beef & Grill: expected at least "
+            f"5 weekday sections, found {len(sections)}"
+        )
+
+
+    return sections[:5]
+
+
+def parse_day_meals(
     lines: list[str]
 ) -> list[dict]:
     """
-    Lounaat.info näyttää Beef & Grillin tiedot muodossa:
+    Parsii yhden päivän annokset.
 
-        19,30e
-        Metsästäjänhärkä 200g
+    Tavallinen järjestys on:
 
-        19,30e
-        Entrecote 200g
+        19,30 €
+        Metsästäjänhärkä (200g)
 
-    Joillakin riveillä hinta voi puuttua lähdedatasta.
-    Tällainen ruoka otetaan silti mukaan.
+        19,30 €
+        Entrecote (200g)
+
+    Parseri sallii myös käänteisen tilanteen:
+
+        Black Angus Burger
+        16,30 €
+
+    jos HTML:n rakenne joskus tuottaa tekstin
+    tässä järjestyksessä.
     """
 
     meals = []
 
     pending_price = None
+    pending_name = None
+
+
+    def add_meal(
+        name: str,
+        price: str | None
+    ) -> None:
+
+        name = normalize_line(
+            name
+        )
+
+
+        if not name:
+            return
+
+
+        meal = {
+            "name":
+                name,
+
+            "diet":
+                [],
+        }
+
+
+        if price:
+
+            meal[
+                "price"
+            ] = price
+
+
+        #
+        # Estetään identtiset duplikaatit.
+        #
+        if meals:
+
+            previous = meals[-1]
+
+            if (
+                previous.get("name")
+                == meal.get("name")
+                and
+                previous.get("price")
+                == meal.get("price")
+            ):
+                return
+
+
+        meals.append(
+            meal
+        )
 
 
     for raw_line in lines:
@@ -264,92 +513,114 @@ def parse_meals(
             continue
 
 
-        if is_metadata(
+        if is_ui_text(
             line
         ):
             continue
 
 
-        price_match = PRICE_RE.match(
+        if is_time(
             line
-        )
+        ):
+            continue
 
 
-        if price_match:
+        #
+        # Hinta
+        #
+        if is_price(
+            line
+        ):
 
-            pending_price = (
-                format_price(
-                    line
-                )
+            price = format_price(
+                line
             )
 
+
+            #
+            # Jos nimi tuli HTML:ssä ennen hintaa.
+            #
+            if pending_name:
+
+                add_meal(
+                    pending_name,
+                    price
+                )
+
+                pending_name = None
+                pending_price = None
+
+            else:
+
+                pending_price = price
+
+
             continue
 
 
         #
-        # Mahdolliset käyttöliittymän ylimääräiset tekstit.
+        # Normaali tapa:
         #
-        lowered = line.lower()
-
-        if lowered in {
-            "beef & grill",
-            "näytä lisää",
-            "piilota",
-        }:
-            continue
-
-
-        meal = {
-            "name":
-                line,
-
-            "diet":
-                [],
-        }
-
-
+        # hinta -> nimi
+        #
         if pending_price:
 
-            meal["price"] = (
+            add_meal(
+                line,
                 pending_price
             )
 
+            pending_price = None
+            pending_name = None
 
-        meals.append(
-            meal
+            continue
+
+
+        #
+        # Jos nimi tulee ennen hintaa,
+        # odotetaan seuraavaa tokenia.
+        #
+        if pending_name:
+
+            #
+            # Edelliselle nimelle ei löytynyt hintaa.
+            # Säilytetään se silti.
+            #
+            add_meal(
+                pending_name,
+                None
+            )
+
+
+        pending_name = line
+
+
+    #
+    # Viimeinen mahdollinen hinnaton ruoka.
+    #
+    if pending_name:
+
+        add_meal(
+            pending_name,
+            None
         )
-
-        pending_price = None
 
 
     if not meals:
+
         raise ValueError(
-            "No Beef & Grill meals were found"
+            "Beef & Grill: no meals found "
+            "from weekday section"
         )
 
 
     return meals
 
 
-def get_current_day_key() -> str:
+def get_week_dates():
     """
-    Suomen paikallinen viikonpäivä.
-    """
-
-    now = datetime.now(
-        ZoneInfo("Europe/Helsinki")
-    )
-
-    return WEEKDAY_KEYS[
-        now.weekday()
-    ]
-
-
-def create_week_label() -> str:
-    """
-    Esimerkiksi:
-
-        VIIKKO 48 | 23.-27.11.2026
+    Kuluvan viikon maanantai-perjantai
+    Suomen ajassa.
     """
 
     today = datetime.now(
@@ -363,10 +634,26 @@ def create_week_label() -> str:
         )
     )
 
-    friday = (
+
+    return [
         monday
-        + timedelta(days=4)
-    )
+        + timedelta(days=index)
+
+        for index in range(5)
+    ]
+
+
+def create_week_label() -> str:
+    """
+    Esimerkiksi:
+
+        VIIKKO 48 | 23.-27.11.2026
+    """
+
+    dates = get_week_dates()
+
+    monday = dates[0]
+    friday = dates[-1]
 
     week_number = (
         monday
@@ -409,54 +696,16 @@ def create_week_label() -> str:
 
 def fetch() -> dict:
     """
-    Main scraperin kutsuma julkinen funktio.
-
-    Beef & Grillin omaa verkkosivua ei kutsuta lainkaan.
+    Hakee Beef & Grillin koko viikon
+    lounaslistan yhdellä ajolla.
     """
-
-    current_day = (
-        get_current_day_key()
-    )
-
-
-    #
-    # Lauantaina ja sunnuntaina ei normaalisti
-    # ole Beef & Grillin lounasta.
-    #
-    if current_day in {
-        "saturday",
-        "sunday",
-    }:
-
-        return {
-            "name":
-                RESTAURANT_NAME,
-
-            "address":
-                "Länsituuli 10, "
-                "02100 Espoo",
-
-            "source":
-                SOURCE_URL,
-
-            "week":
-                create_week_label(),
-
-            "prices":
-                [],
-
-            "days": {
-                current_day: [],
-            },
-        }
-
 
     session = create_session()
 
 
     print(
         "  Fetching Beef & Grill "
-        "from lounaat.info..."
+        "weekly menu from lounas.online..."
     )
 
 
@@ -466,7 +715,10 @@ def fetch() -> dict:
         headers={
             "Accept":
                 "text/html,"
-                "application/xhtml+xml"
+                "application/xhtml+xml",
+
+            "Accept-Language":
+                "fi-FI,fi;q=0.9,en;q=0.8",
         }
     )
 
@@ -476,25 +728,88 @@ def fetch() -> dict:
     )
 
 
-    meals = parse_meals(
+    sections = split_day_sections(
         lines
     )
 
 
-    print(
-        f"  Beef & Grill: "
-        f"{len(meals)} meal(s) found"
+    days = {}
+
+    day_info = {}
+
+
+    for index, (
+        time_line,
+        section_lines,
+    ) in enumerate(
+        sections
+    ):
+
+        day_key = (
+            WEEKDAYS[
+                index
+            ]
+        )
+
+
+        start, end = parse_time(
+            time_line
+        )
+
+
+        meals = parse_day_meals(
+            section_lines
+        )
+
+
+        days[
+            day_key
+        ] = meals
+
+
+        day_info[
+            day_key
+        ] = {
+            "start":
+                start,
+
+            "end":
+                end,
+        }
+
+
+        print(
+            f"    {day_key}: "
+            f"{len(meals)} meal(s)"
+        )
+
+
+    #
+    # Viikonloppuna ei ole lounasta.
+    #
+    days[
+        "saturday"
+    ] = []
+
+    days[
+        "sunday"
+    ] = []
+
+
+    meal_count = sum(
+        len(meals)
+        for meals
+        in days.values()
     )
 
 
-    #
-    # lounaat.info:n Tapiola-näkymä antaa
-    # kuluvan päivän lounaat.
-    #
-    days = {
-        current_day:
-            meals
-    }
+    print(
+        "  Beef & Grill weekly parsing succeeded"
+    )
+
+    print(
+        f"  Found {meal_count} meal(s)"
+    )
 
 
     return {
@@ -508,15 +823,22 @@ def fetch() -> dict:
         "source":
             SOURCE_URL,
 
+        "data_source":
+            DATA_URL,
+
         "week":
             create_week_label(),
 
         #
         # Beef & Grillillä ei ole yhtä yhteistä
-        # lounashintaa, vaan hinnat ovat annoskohtaisia.
+        # lounashintaa. Hinta on jokaisessa
+        # meal-objektissa erikseen.
         #
         "prices":
             [],
+
+        "day_info":
+            day_info,
 
         "days":
             days,
