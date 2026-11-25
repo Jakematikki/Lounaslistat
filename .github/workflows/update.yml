@@ -8,8 +8,8 @@ on:
   workflow_dispatch:
 
   schedule:
-  - cron: "23 9 * * 1-5"
-    timezone: "Europe/Helsinki"
+    - cron: "23 9 * * 1-5"
+      timezone: "Europe/Helsinki"
 
 permissions:
   contents: read
